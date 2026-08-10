@@ -5,12 +5,14 @@ import re
 from call_ollama import call_ollama
 from feishu_event import FeishuEventListener
 from feishu_downloader import ppt_downloader
-from doc_intelligence import parse_document, merge_markdown_by_page
+from functions.doc_intelligence import parse_document, merge_markdown_by_page
 from db_store import document_store
 from deepseek_util import deepseek_chat
 from feishu_sender import send_to_feishu
 import system_prompt
 from call_qwen import call_qwen
+from functions.common_utils import clean_page_text_list
+from vllm_call import chat_with_vllm
 
 
 def on_message_received(msg_data):
@@ -59,10 +61,10 @@ def on_message_received(msg_data):
 
         input_text = f"""
         旧版：
-        {json.dumps(old_doc["page_text_list"], ensure_ascii=False, indent=2)}
+        {json.dumps(clean_page_text_list(old_doc["page_text_list"]), ensure_ascii=False, indent=2)}
 
         新版：
-        {json.dumps(page_text_list, ensure_ascii=False, indent=2)}
+        {json.dumps(clean_page_text_list(page_text_list), ensure_ascii=False, indent=2)}
         """
 
         # diff_result = deepseek_chat(
@@ -70,7 +72,7 @@ def on_message_received(msg_data):
         #     system_prompt=system_prompt.ppt_version_diff,
         # )
 
-        diff_result = call_qwen(
+        diff_result = chat_with_vllm(
             user_message=input_text,
             system_message=system_prompt.ppt_version_diff,
         )

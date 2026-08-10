@@ -36,13 +36,13 @@ class DocumentStore:
 
         self.conn.commit()
 
-    def save_document(self, file_name: str, page_text_list: list[str],
+    def save_document(self, file_name: str, page_text_list: list[dict],
                       file_path: str = None, message_id: str = None,
                       chat_id: str = None) -> int:
         """
         保存一个文档（merge_markdown_by_page 的产物整体存为一条JSON记录）
         :param file_name: PPT文件名
-        :param page_text_list: merge_markdown_by_page 的返回值（每页一个字符串）
+        :param page_text_list: merge_markdown_by_page 的返回值 [page_num:, text:]
         :param file_path: 本地文件路径（可选）
         :param message_id: 飞书消息ID（可选）
         :param chat_id: 飞书群ID（可选）
@@ -115,4 +115,3 @@ class DocumentStore:
 
 # 全局单例
 document_store = DocumentStore(config.DB_PATH)
-print(document_store.list_documents())

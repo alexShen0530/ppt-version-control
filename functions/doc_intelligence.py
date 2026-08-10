@@ -45,7 +45,7 @@ def parse_document(file_path: str):
     #     json.dump(result, output, ensure_ascii=False, indent=2)
     return result
 
-def merge_markdown_by_page(result: dict) -> list[str]:
+def merge_markdown_by_page(result: dict) -> list[dict]:
     pages = {}
 
     for layout in result["Data"]["layouts"]:
@@ -60,7 +60,7 @@ def merge_markdown_by_page(result: dict) -> list[str]:
                 (layout.get("index", 0), markdown)
             )
 
-    return [
+    page_text_list = [
         "\n".join(
             markdown
             for _, markdown in sorted(pages[page_num])
@@ -69,23 +69,24 @@ def merge_markdown_by_page(result: dict) -> list[str]:
     ]
 
 
-def save_pages_to_json(page_text_list: list[str], output_path: str) -> None:
-    pages = [
+    return [
         {"page_num": page_num, "text": text}
         for page_num, text in enumerate(page_text_list, start=1)
     ]
 
+
+def save_pages_to_json(pages: list[dict], output_path: str) -> None:
     with Path(output_path).open("w", encoding="utf-8") as output_file:
         json.dump(pages, output_file, ensure_ascii=False, indent=2)
 
 
 if __name__ == "__main__":
-    input_path = r"C:\Users\shen.xin\Downloads\AI&财务\AI落地应用场景规划V2.pptx"
+    input_path = r"C:\Users\shen.xin\Downloads\AI&财务\AI智算中心&财务P1工作.pptx"
     result = parse_document(input_path)
     # print(result)
-    page_text_list = merge_markdown_by_page(result)
-    print(page_text_list)
+    pages = merge_markdown_by_page(result)
+    print(pages)
     # output_path = os.path.join(config.DOWNLOAD_DIR, f"{Path(input_path).stem}_pages.json")
-    # save_pages_to_json(page_text_list, str(output_path))
+    # save_pages_to_json(pages, str(output_path))
     # print(f"页面内容已保存到: {output_path}")
 
