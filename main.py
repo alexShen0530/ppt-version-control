@@ -3,6 +3,7 @@ import os
 import re
 
 from call_ollama import call_ollama
+from call_qwen import call_qwen_vision
 from feishu_event import FeishuEventListener
 from feishu_downloader import ppt_downloader
 from functions.doc_intelligence import parse_document, merge_markdown_by_page
@@ -10,9 +11,9 @@ from db_store import document_store
 from deepseek_util import deepseek_chat
 from feishu_sender import send_to_feishu
 import system_prompt
-from call_qwen import call_qwen
-from functions.common_utils import clean_page_text_list
+from functions.common_utils import enrich_pages_with_ocr
 from vllm_call import chat_with_vllm
+import config
 
 
 def on_message_received(msg_data):
@@ -38,6 +39,9 @@ def on_message_received(msg_data):
         # 4. 按页合并Markdown内容
         page_text_list = merge_markdown_by_page(result)
 
+        # 4.5 本地提取图片批量OCR，清除图片占位符，OCR结果追加到对应页末尾
+        page_text_list = enrich_pages_with_ocr(file_path, page_text_list)
+
         # 5. 存入本地数据库（一个PPT一条记录）
         file_name = json.loads(msg_data["content"])["file_name"]
         doc_id = document_store.save_document(
@@ -61,10 +65,10 @@ def on_message_received(msg_data):
 
         input_text = f"""
         旧版：
-        {json.dumps(clean_page_text_list(old_doc["page_text_list"]), ensure_ascii=False, indent=2)}
+        {json.dumps(old_doc["page_text_list"], ensure_ascii=False, indent=2)}
 
         新版：
-        {json.dumps(clean_page_text_list(page_text_list), ensure_ascii=False, indent=2)}
+        {json.dumps(page_text_list, ensure_ascii=False, indent=2)}
         """
 
         # diff_result = deepseek_chat(
@@ -72,7 +76,7 @@ def on_message_received(msg_data):
         #     system_prompt=system_prompt.ppt_version_diff,
         # )
 
-        diff_result = chat_with_vllm(
+        diff_result = call_qwen_vision(
             user_message=input_text,
             system_message=system_prompt.ppt_version_diff,
         )
@@ -85,9 +89,16 @@ def on_message_received(msg_data):
         import traceback
         traceback.print_exc()
     finally:
-        # 7. 安全删除下载的临时PPT文件（解析完成后本地不再保留）
+        # 7. 安全删除下载的临时PPT文件及提取的图片目录
         if file_path and os.path.exists(file_path):
             try:
+                # 先删图片目录（与PPT同名的子目录）
+                image_dir = os.path.join(config.DOWNLOAD_DIR, os.path.splitext(os.path.basename(file_path))[0])
+                if os.path.isdir(image_dir):
+                    import shutil
+                    shutil.rmtree(image_dir)
+                    print(f"🗑️  已删除图片目录: {image_dir}")
+
                 os.remove(file_path)
                 print(f"🗑️  已删除临时文件: {file_path}")
             except Exception as e:

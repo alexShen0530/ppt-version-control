@@ -17,7 +17,7 @@ def _get_client():
 def call_qwen_vision(
          user_message: str,
          system_message: str,
-         image_paths: list[str] | None = None,
+         image_paths: list[str] = [],
          model: str = "qwen3-vl-32b-thinking",
          high_resolution: bool = True
     ) -> str:
