@@ -84,40 +84,44 @@ def extract_ppt_images(ppt_path: str, download_dir: str = config.DOWNLOAD_DIR) -
 
 def enrich_pages_with_ocr(ppt_path: str, page_text_list: list[dict]) -> list[dict]:
     """
-    批量OCR PPT本地提取的图片与视频三帧，结果追加到对应页文本末尾
-    （同时清除DocMind产出中的图片占位符）
+    批量识别PPT图片与视频三帧，按页写入images和videos字段。
     """
     # 延迟导入，避免循环依赖（prompt_message -> call_qwen -> common_utils）
     from prompt_message import ppt_image_describer, ppt_video_describer
     from functions.concurrent_util import execute_parallel_with_fallback
     from functions.video_extractor import process_ppt_videos
 
-    def parse_result(raw: str, summary_label: str) -> str:
+    def parse_result(raw: str) -> dict:
         try:
             data = json.loads(raw)
-            return f"原文本：{data.get('raw_text', '')}\n{summary_label}：{data.get('summary', '')}"
+            return data if isinstance(data, dict) else {}
         except (json.JSONDecodeError, TypeError):
-            return raw
+            return {}
 
-    def ocr_image(image_path: str) -> str:
-        return parse_result(ppt_image_describer(image_path), "图片理解")
+    def ocr_image(image_path: str) -> dict:
+        data = parse_result(ppt_image_describer(image_path))
+        return {
+            "raw_text": data.get("raw_text", ""),
+            "summary": data.get("summary", ""),
+        }
 
-    def ocr_video(frame_paths: list[str]) -> str:
-        return parse_result(ppt_video_describer(frame_paths), "视频理解")
+    def ocr_video(frame_paths: list[str]) -> dict:
+        data = parse_result(ppt_video_describer(frame_paths))
+        return {"summary": data.get("summary", "")}
 
     # 1. 图片批量并发OCR
     tasks, task_pages = [], []
     for page in extract_ppt_images(ppt_path):
         for image_path in page["image_paths"]:
             tasks.append((ocr_image, (image_path,), {},
-                          Path(image_path).name, "该图片暂时无法读取"))
+                          Path(image_path).name,
+                          {"raw_text": "", "summary": "该图片暂时无法读取"}))
             task_pages.append(page["page_num"])
     results = execute_parallel_with_fallback(tasks, max_workers=3, timeout_seconds=180)
 
     ocr_by_page = {}
-    for page_num, text in zip(task_pages, results):
-        images = ocr_by_page.setdefault(page_num, [])
-        images.append(f"【图片{len(images) + 1}】\n{text}")
+    for page_num, result in zip(task_pages, results):
+        ocr_by_page.setdefault(page_num, []).append(result)
 
     # 2. 视频三帧批量并发OCR（页码未知的视频跳过）
     video_dir = Path(config.DOWNLOAD_DIR) / Path(ppt_path).stem
@@ -131,23 +135,21 @@ def enrich_pages_with_ocr(ppt_path: str, page_text_list: list[dict]) -> list[dic
         if not frame_paths:
             continue
         tasks.append((ocr_video, (frame_paths,), {},
-                      Path(item["video"]).name, "该视频暂时无法读取"))
+                      Path(item["video"]).name,
+                      {"summary": "该视频暂时无法读取"}))
         task_pages.append(page_num)
     results = execute_parallel_with_fallback(tasks, max_workers=3, timeout_seconds=300)
 
     video_by_page = {}
-    for page_num, text in zip(task_pages, results):
-        videos = video_by_page.setdefault(page_num, [])
-        videos.append(f"【视频{len(videos) + 1}】\n{text}")
+    for page_num, result in zip(task_pages, results):
+        video_by_page.setdefault(page_num, []).append(result)
 
-    # 3. 清除图片占位符，把图片/视频OCR结果追加到对应页末尾
+    # 3. 清除图片占位符，按页合并结构化识别结果
     enriched = clean_page_text_list(page_text_list)
     for item in enriched:
         page_num = item["page_num"]
-        if ocr_by_page.get(page_num):
-            item["text"] += "\n\n【图片内容】\n" + "\n\n".join(ocr_by_page[page_num])
-        if video_by_page.get(page_num):
-            item["text"] += "\n\n【视频内容】\n" + "\n\n".join(video_by_page[page_num])
+        item["images"] = ocr_by_page.get(page_num, [])
+        item["videos"] = video_by_page.get(page_num, [])
 
     return enriched
 
