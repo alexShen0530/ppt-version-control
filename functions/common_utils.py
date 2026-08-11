@@ -2,6 +2,7 @@ import re
 import json
 import base64
 import io
+from concurrent.futures import ThreadPoolExecutor
 from PIL import Image
 from pathlib import Path
 from pptx import Presentation
@@ -82,10 +83,8 @@ def extract_ppt_images(ppt_path: str, download_dir: str = config.DOWNLOAD_DIR) -
     return result
 
 
-def enrich_pages_with_ocr(ppt_path: str, page_text_list: list[dict]) -> list[dict]:
-    """
-    批量识别PPT图片与视频三帧，按页写入images和videos字段。
-    """
+def collect_multimedia_ocr(ppt_path: str) -> dict:
+    """并行识别PPT中的图片与视频，返回按页分组的结果。"""
     # 延迟导入，避免循环依赖（prompt_message -> call_qwen -> common_utils）
     from prompt_message import ppt_image_describer, ppt_video_describer
     from functions.concurrent_util import execute_parallel_with_fallback
@@ -109,47 +108,66 @@ def enrich_pages_with_ocr(ppt_path: str, page_text_list: list[dict]) -> list[dic
         data = parse_result(ppt_video_describer(frame_paths))
         return {"summary": data.get("summary", "")}
 
-    # 1. 图片批量并发OCR
-    tasks, task_pages = [], []
-    for page in extract_ppt_images(ppt_path):
-        for image_path in page["image_paths"]:
-            tasks.append((ocr_image, (image_path,), {},
-                          Path(image_path).name,
-                          {"raw_text": "", "summary": "该图片暂时无法读取"}))
-            task_pages.append(page["page_num"])
-    results = execute_parallel_with_fallback(tasks, max_workers=3, timeout_seconds=180)
+    def process_images() -> dict:
+        tasks, task_pages = [], []
+        for page in extract_ppt_images(ppt_path):
+            for image_path in page["image_paths"]:
+                tasks.append((ocr_image, (image_path,), {},
+                              Path(image_path).name,
+                              {"raw_text": "", "summary": "该图片暂时无法读取"}))
+                task_pages.append(page["page_num"])
+        results = execute_parallel_with_fallback(tasks, max_workers=3, timeout_seconds=180)
+        grouped = {}
+        for page_num, result in zip(task_pages, results):
+            grouped.setdefault(page_num, []).append(result)
+        return grouped
 
-    ocr_by_page = {}
-    for page_num, result in zip(task_pages, results):
-        ocr_by_page.setdefault(page_num, []).append(result)
+    def process_videos() -> dict:
+        video_dir = Path(config.DOWNLOAD_DIR) / Path(ppt_path).stem
+        tasks, task_pages = [], []
+        for item in process_ppt_videos(ppt_path, output_dir=str(video_dir)):
+            page_num = item["slide"]
+            if not page_num:
+                print(f"⚠️  视频无法定位页码，跳过: {Path(item['video']).name}")
+                continue
+            frame_paths = [path for path in item["frames"].values() if path]
+            if not frame_paths:
+                continue
+            tasks.append((ocr_video, (frame_paths,), {},
+                          Path(item["video"]).name,
+                          {"summary": "该视频暂时无法读取"}))
+            task_pages.append(page_num)
+        results = execute_parallel_with_fallback(tasks, max_workers=3, timeout_seconds=300)
+        grouped = {}
+        for page_num, result in zip(task_pages, results):
+            grouped.setdefault(page_num, []).append(result)
+        return grouped
 
-    # 2. 视频三帧批量并发OCR（页码未知的视频跳过）
-    video_dir = Path(config.DOWNLOAD_DIR) / Path(ppt_path).stem
-    tasks, task_pages = [], []
-    for item in process_ppt_videos(ppt_path, output_dir=str(video_dir)):
-        page_num = item["slide"]
-        if not page_num:
-            print(f"⚠️  视频无法定位页码，跳过: {Path(item['video']).name}")
-            continue
-        frame_paths = [p for p in item["frames"].values() if p]
-        if not frame_paths:
-            continue
-        tasks.append((ocr_video, (frame_paths,), {},
-                      Path(item["video"]).name,
-                      {"summary": "该视频暂时无法读取"}))
-        task_pages.append(page_num)
-    results = execute_parallel_with_fallback(tasks, max_workers=3, timeout_seconds=300)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        images_future = executor.submit(process_images)
+        videos_future = executor.submit(process_videos)
+        return {
+            "images_by_page": images_future.result(),
+            "videos_by_page": videos_future.result(),
+        }
 
-    video_by_page = {}
-    for page_num, result in zip(task_pages, results):
-        video_by_page.setdefault(page_num, []).append(result)
 
-    # 3. 清除图片占位符，按页合并结构化识别结果
+def enrich_pages_with_ocr(
+    ppt_path: str,
+    page_text_list: list[dict],
+    multimedia_result: dict | None = None,
+) -> list[dict]:
+    """清理页面正文并合并结构化图片、视频识别结果。"""
+    if multimedia_result is None:
+        multimedia_result = collect_multimedia_ocr(ppt_path)
+    images_by_page = multimedia_result.get("images_by_page", {})
+    videos_by_page = multimedia_result.get("videos_by_page", {})
+
     enriched = clean_page_text_list(page_text_list)
     for item in enriched:
         page_num = item["page_num"]
-        item["images"] = ocr_by_page.get(page_num, [])
-        item["videos"] = video_by_page.get(page_num, [])
+        item["images"] = images_by_page.get(page_num, [])
+        item["videos"] = videos_by_page.get(page_num, [])
 
     return enriched
 

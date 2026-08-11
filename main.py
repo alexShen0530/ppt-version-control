@@ -1,6 +1,7 @@
 import json
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor
 
 from call_ollama import call_ollama
 from call_qwen import call_qwen_vision
@@ -11,7 +12,7 @@ from db_store import document_store
 from deepseek_util import deepseek_chat
 from feishu_sender import send_to_feishu
 import system_prompt
-from functions.common_utils import enrich_pages_with_ocr
+from functions.common_utils import collect_multimedia_ocr, enrich_pages_with_ocr
 from vllm_call import chat_with_vllm
 import config
 
@@ -33,14 +34,20 @@ def on_message_received(msg_data):
             print("❌ PPT下载失败，跳过")
             return
 
-        # 3. 调用阿里云文档智能解析PPT
-        result = parse_document(file_path)
+        # 3. 文档解析与多媒体识别并行执行
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            document_future = executor.submit(parse_document, file_path)
+            multimedia_future = executor.submit(collect_multimedia_ocr, file_path)
+            result = document_future.result()
+            multimedia_result = multimedia_future.result()
 
         # 4. 按页合并Markdown内容
         page_text_list = merge_markdown_by_page(result)
 
-        # 4.5 本地提取图片批量OCR，清除图片占位符，OCR结果追加到对应页末尾
-        page_text_list = enrich_pages_with_ocr(file_path, page_text_list)
+        # 4.5 清除图片占位符，合并结构化图片与视频识别结果
+        page_text_list = enrich_pages_with_ocr(
+            file_path, page_text_list, multimedia_result
+        )
 
         # 5. 存入本地数据库（一个PPT一条记录）
         file_name = json.loads(msg_data["content"])["file_name"]
