@@ -87,11 +87,13 @@ def map_videos_to_slides(pptx_path: str) -> dict[str, int]:
 # 第二步: 抽取开头帧 / 中间帧 / 结尾帧
 # ---------------------------------------------------------------------------
 
-def extract_key_frames(video_path: str, output_dir: str, prefix: str) -> dict[str, Optional[str]]:
+def extract_key_frames(
+    video_path: str, output_dir: str, prefix: str
+) -> tuple[dict[str, Optional[str]], Optional[float]]:
     """
     对单个视频抽取三个关键帧并保存为 jpg。
 
-    返回: {"start": 图片路径或None, "mid": ..., "end": ...}
+    返回: (三帧路径, 视频时长秒数)
     """
     video_path = Path(video_path)
     out_dir = Path(output_dir)
@@ -100,10 +102,11 @@ def extract_key_frames(video_path: str, output_dir: str, prefix: str) -> dict[st
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         print(f"[error] 无法打开视频 (可能缺少对应解码器): {video_path}")
-        return {"start": None, "mid": None, "end": None}
+        return {"start": None, "mid": None, "end": None}, None
 
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     fps = cap.get(cv2.CAP_PROP_FPS) or 0
+    duration_seconds = total_frames / fps if total_frames > 0 and fps > 0 else None
     print(f"[info] {video_path.name}: 总帧数={total_frames}, fps={fps:.2f}")
 
     # 元数据不可靠时退化为 0 帧
@@ -144,7 +147,7 @@ def extract_key_frames(video_path: str, output_dir: str, prefix: str) -> dict[st
             print(f"[warn] 抽取 {tag} 帧失败: {video_path.name}")
 
     cap.release()
-    return saved
+    return saved, duration_seconds
 
 
 def _seek_last_frame(cap: cv2.VideoCapture) -> tuple[bool, object]:
@@ -200,12 +203,13 @@ def process_ppt_videos(pptx_path: str, output_dir: str = "ppt_frames") -> list[d
 
     for idx, video in enumerate(videos, start=1):
         prefix = f"slide{slide_map.get(video.name, 'unknown')}_video{idx}"
-        frames = extract_key_frames(str(video), str(frames_dir), prefix)
+        frames, duration_seconds = extract_key_frames(str(video), str(frames_dir), prefix)
 
         results.append({
             "video": str(video),
             "slide": slide_map.get(video.name),
             "frames": frames,
+            "duration_seconds": duration_seconds,
         })
 
     # 4. 汇总打印

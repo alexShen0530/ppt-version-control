@@ -1,3 +1,6 @@
+from concurrent.futures import ThreadPoolExecutor
+from threading import Lock
+
 from lark_oapi.ws import Client
 from lark_oapi.event.dispatcher_handler import EventDispatcherHandler
 import config
@@ -14,7 +17,9 @@ class FeishuEventListener:
         :param on_message_callback: 收到消息时的回调函数
         """
         self.on_message_callback = on_message_callback
-        self.processed_message_ids = set()  # 已处理的消息ID，用于去重
+        self.processed_message_ids = set()
+        self.processed_message_lock = Lock()
+        self.task_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ppt-worker")
 
         # 1. 构建事件处理器
         event_handler = EventDispatcherHandler.builder(
@@ -42,23 +47,16 @@ class FeishuEventListener:
             message_id = message.message_id
             sender_id = event.sender.sender_id.open_id
 
-            # 去重：已经处理过的消息直接跳过
-            if message_id in self.processed_message_ids:
-                print(f"🔄 重复消息，跳过: {message_id}")
-                return
-
-            # 持久化去重：查documents表，已成功入库的消息（重启后补推的）直接跳过
-            if document_store.is_message_processed(message_id):
-                print(f"🔄 消息已成功处理过，跳过: {message_id}")
-                return
-
-            # 标记为已处理
-            self.processed_message_ids.add(message_id)
-
-            # 限制集合大小，防止内存泄漏（最多保留最近1000条）
-            if len(self.processed_message_ids) > 1000:
-                # 移除最早的一部分
-                self.processed_message_ids = set(list(self.processed_message_ids)[-500:])
+            with self.processed_message_lock:
+                if message_id in self.processed_message_ids:
+                    print(f"🔄 重复消息，跳过: {message_id}")
+                    return
+                if document_store.is_message_processed(message_id):
+                    print(f"🔄 消息已成功处理过，跳过: {message_id}")
+                    return
+                self.processed_message_ids.add(message_id)
+                if len(self.processed_message_ids) > 1000:
+                    self.processed_message_ids = set(list(self.processed_message_ids)[-500:])
 
             print(f"\n📨 收到新消息 | 类型: {msg_type} | 群ID: {chat_id}")
 
@@ -71,11 +69,21 @@ class FeishuEventListener:
                 "content": message.content  # JSON字符串
             }
 
-            # 调用回调函数处理
-            self.on_message_callback(msg_data)
+            # 投递后台任务后立即返回，避免阻塞长连接心跳
+            self.task_executor.submit(self._process_message, msg_data)
 
         except Exception as e:
             print(f"❌ 处理消息出错: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def _process_message(self, msg_data):
+        try:
+            self.on_message_callback(msg_data)
+        except Exception as e:
+            with self.processed_message_lock:
+                self.processed_message_ids.discard(msg_data["message_id"])
+            print(f"❌ 后台处理消息失败: {e}")
             import traceback
             traceback.print_exc()
 

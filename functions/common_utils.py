@@ -104,9 +104,17 @@ def collect_multimedia_ocr(ppt_path: str) -> dict:
             "summary": data.get("summary", ""),
         }
 
-    def ocr_video(frame_paths: list[str]) -> dict:
+    def video_summary(summary: str, duration_seconds: float | None) -> dict:
+        if duration_seconds is None:
+            return {"summary": summary}
+        total_seconds = max(1, round(duration_seconds))
+        minutes, seconds = divmod(total_seconds, 60)
+        duration = f"{minutes}分{seconds}秒" if minutes else f"{seconds}秒"
+        return {"summary": f"视频时长约{duration}。{summary}"}
+
+    def ocr_video(frame_paths: list[str], duration_seconds: float | None) -> dict:
         data = parse_result(ppt_video_describer(frame_paths))
-        return {"summary": data.get("summary", "")}
+        return video_summary(data.get("summary", ""), duration_seconds)
 
     def process_images() -> dict:
         tasks, task_pages = [], []
@@ -133,9 +141,10 @@ def collect_multimedia_ocr(ppt_path: str) -> dict:
             frame_paths = [path for path in item["frames"].values() if path]
             if not frame_paths:
                 continue
-            tasks.append((ocr_video, (frame_paths,), {},
+            duration_seconds = item.get("duration_seconds")
+            tasks.append((ocr_video, (frame_paths, duration_seconds), {},
                           Path(item["video"]).name,
-                          {"summary": "该视频暂时无法读取"}))
+                          video_summary("该视频暂时无法读取", duration_seconds)))
             task_pages.append(page_num)
         results = execute_parallel_with_fallback(tasks, max_workers=3, timeout_seconds=300)
         grouped = {}
