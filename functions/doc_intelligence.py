@@ -56,6 +56,9 @@ def merge_markdown_by_page(result: dict) -> list[dict]:
             continue
 
         for page_num in page_nums:
+            if page_num == 0:
+                continue
+
             pages.setdefault(page_num, []).append(
                 (layout.get("index", 0), markdown)
             )
@@ -81,7 +84,7 @@ def save_pages_to_json(pages: list[dict], output_path: str) -> None:
 
 
 if __name__ == "__main__":
-    input_path = r"C:\Users\shen.xin\Downloads\AI&财务\AI智算中心&财务P1工作.pptx"
+    input_path = r"C:\Users\shen.xin\Downloads\AI&财务\希迪智驾公司介绍V1.pptx"
     result = parse_document(input_path)
     # print(result)
     pages = merge_markdown_by_page(result)

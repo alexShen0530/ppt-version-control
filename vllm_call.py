@@ -1,13 +1,10 @@
+from openai import OpenAI
+
+from functions.common_utils import encode_image
+import json
 import re
 
-from openai import OpenAI
-import json
-
-import system_prompt
-from functions.doc_intelligence import parse_document, merge_markdown_by_page
-from functions.common_utils import clean_page_text_list
-
-VLLM_URL = "http://172.16.41.37:7080/v1"
+VLLM_URL = "http://172.16.41.37:7090/v1"
 
 client = OpenAI(
     base_url=VLLM_URL,
@@ -18,62 +15,97 @@ client = OpenAI(
 def chat_with_vllm(
     user_message: str,
     system_message: str,
-    model: str = "qwen2.5-14b",
+    image_paths: list[str] | None = None,
+    model: str = "Qwen2.5-VL-7B-Instruct",
+    high_resolution: bool = True,
 ) -> str:
-    """
-    调用本地 vLLM 模型。
+    """调用 vLLM 部署的 Qwen2.5 文本或视觉模型，支持多张本地图片。"""
+    if image_paths:
+        content = [{"type": "text", "text": user_message}]
+        for image_path in image_paths:
+            content.append({
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/jpeg;base64,{encode_image(image_path, high_resolution)}"
+                },
+            })
+    else:
+        content = user_message
 
-    :param user_message: 用户消息
-    :param system_message: 系统提示词
-    :param model: vLLM 中注册的模型名称
-    :return: 模型回复文本
-    """
     try:
         response = client.chat.completions.create(
             model=model,
             messages=[
-                {
-                    "role": "system",
-                    "content": system_message,
-                },
-                {
-                    "role": "user",
-                    "content": user_message,
-                },
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": content},
             ],
-            temperature=0.7,
+            temperature=0.1,
             max_tokens=2000,
+            extra_body={"repetition_penalty": 1.05},
         )
 
-        return response.choices[0].message.content or ""
-
+        result = response.choices[0].message.content or ""
+        result = result.strip()
+        result = re.sub(r"^```(?:json)?\s*", "", result)
+        result = re.sub(r"\s*```$", "", result)
+        return result
     except Exception as exc:
-        raise RuntimeError(f"调用 vLLM 模型失败：{exc}") from exc
+        raise RuntimeError(f"调用 vLLM 模型失败: {exc}") from exc
 
 if __name__ == "__main__":
-    input_path1 = r"C:\Users\shen.xin\Downloads\AI&财务\AI落地应用场景规划V1.pptx"
-    result1 = parse_document(input_path1)
-    page_text_list1 = clean_page_text_list(merge_markdown_by_page(result1))
-    print(page_text_list1)
+    system_message = """
+    ## Role
+    你是一个专业的图片内容理解与文本提取助手，能够像人一样理解图片中的文字、结构、流程、图表和视觉信息。
 
-    input_path2 = r"C:\Users\shen.xin\Downloads\AI&财务\AI落地应用场景规划V2.pptx"
-    result2 = parse_document(input_path2)
-    page_text_list2 = clean_page_text_list(merge_markdown_by_page(result2))
-    print(page_text_list2)
+    ## Goal
+    对输入图片进行内容理解，并输出两部分结果：
+    1. **原文本**：提取图片中实际存在的文字，并按照图片原有结构整理。
+    2. **图片理解**：结合文字和视觉内容，用简洁自然语言说明图片主要表达的信息。
+    重点是准确提取和理解图片内容，不进行无关的版式、颜色、图标或设计分析。
 
-    input_text = f"""
-            旧版：
-            {json.dumps(page_text_list1, ensure_ascii=False, indent=2)}
+    ## Task Procedure
+    ### 1. 原文本提取
+    识别图片中实际可见的文字，包括：
+    * 标题
+    * 正文
+    * 模块名称
+    * 模块说明
+    * 编号
+    * 标签
+    * 流程步骤
+    * 表格内容
+    * 图表中的文字
+    * 补充说明
+    根据图片中的位置、层级和逻辑关系整理文字，使结果保持原图的信息结构。
+    要求：
+    * **必须保留原文**
+    * 不翻译、不总结、不改写原意、不添加图片中不存在的文字、同一模块中的文字合理合并、忽略纯装饰性图标、连接线、背景、边框等元素
+    * 如果图片中完全没有文字，则原文本输出为空字符串。
 
-            新版：
-            {json.dumps(page_text_list2, ensure_ascii=False, indent=2)}
-            """
+    ### 2. 图片内容理解
+    综合图片中的文字、图形、流程、结构和视觉关系，理解图片真正表达的内容。
+    要求：
+    * 用自然语言概括图片表达的核心信息
+    * 可以说明模块之间的关系、流程关系或业务含义
+    * 如果图片主要由图形组成，即使没有文字，也需要根据可见内容进行理解
+    * 不需要描述颜色、尺寸、位置、图标样式等无业务意义的信息
+    * 不输出诸如 Layout、Connections、Icons、Diagram Analysis 等视觉分析内容
+    * 不逐项描述图片长什么样
+    * 不重复大段原文本
+    * 图片理解应简洁，重点说明“这张图在表达什么”
 
+    ## Objective
+    必须严格输出合法 JSON，格式如下：
+    {
+    "raw_text": "图片中的原始文本",
+    "summary": "对图片核心内容的简洁理解"
+    }
 
-
-    result = chat_with_vllm(
-        user_message=input_text,
-        system_message=system_prompt.ppt_version_diff,
-    )
-
+    要求：
+    只输出合法 JSON，不要使用** Markdown 代码块**，不要输出 ```json 或 ```，不要输出任何额外说明。
+        """
+    result = chat_with_vllm('',system_message, model="Qwen2.5-VL-7B-Instruct", image_paths=[r"C:\Users\shen.xin\Downloads\1.png"])
     print(result)
+
+    print(json.loads(result))
+

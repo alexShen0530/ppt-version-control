@@ -83,7 +83,7 @@ def on_message_received(msg_data):
         #     system_prompt=system_prompt.ppt_version_diff,
         # )
 
-        diff_result = call_qwen_vision(
+        diff_result = chat_with_vllm(
             user_message=input_text,
             system_message=system_prompt.ppt_version_diff,
         )
