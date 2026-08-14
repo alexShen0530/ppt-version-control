@@ -2,6 +2,66 @@ import json
 
 from call_qwen import call_qwen_vision
 from vllm_call import chat_with_vllm
+from deepseek_util import deepseek_chat
+
+
+def ppt_page_diff(relation: dict) -> str:
+    """分析一组已匹配的 PPT 页面关系，返回 JSON 格式的差异结果。"""
+    relation_type = relation.get("relation")
+    if relation_type not in ["matched", "moved", "added", "deleted"]:
+        raise ValueError(f"不支持的页面关系类型: {relation_type}")
+
+    matched_moved_msg = """
+    ## Task Procedure
+    1. 对于**text**字段: 进行逐字比较，但忽略空格、换行、标点和 Markdown格式不同而导致的差异，找出有实际意义的内容变化；
+    2. 对于**images**字段，
+        - 如果raw_text字段不为空，则仅根据 `raw_text` 比较图片内容差异，`summary` 仅用于辅助匹配图片，不参与差异判断；
+        - 如果 `raw_text` 为空，则根据 `summary` 的核心语义比较图片内容；
+        - 比较 `summary` 时，以图片的主体、场景、动作和表达含义是否发生变化为准；描述粒度、措辞或同义表达不同**不算差异**；
+    3. 对于**videos**字段，根据**summary**进行内容差异比较，以图片的主体、场景、动作和表达含义是否发生变化为准；描述粒度、措辞或同义表达不同**不算差异**；
+    4. 忽略 OCR 轻微误差及 images 数组顺序变化；
+    """
+
+    added_deleted_msg = """
+    ## Task Procedure
+    概括精简总结新版新增页面或者新版删除页面的核心内容，has_difference 必须为 true。
+    """
+
+
+    system_message = f"""
+    ## Role
+    你是一名 PPT 页面版本差异分析助手，负责比较同一份 PPT 旧版页面和新版页面的内容差异。
+    用户上传的文本中包含新旧两个ppt对应页面的解析结果, 格式如下：
+    {{
+      "page_num": 1,
+      "text": "页面文本",
+      "images": [{{"raw_text": "图片原文", "summary": "图片理解"}}],
+      "videos": [{{"summary": "视频理解"}}]
+    }}
+
+    {matched_moved_msg if relation_type in ["matched", "moved"] else added_deleted_msg}
+
+    ## Output
+    只输出合法 JSON，不要输出 Markdown、代码块或任何额外说明。
+
+    存在实际差异时：
+    {{
+      "has_difference": true,
+      "summary": "旧版第 X 页 → 新版第 X 页：说明具体发生了什么变化，包括新增、删除、修改等实际差异。"
+    }}
+
+    没有实际差异时：
+    {{
+      "has_difference": false,
+      "summary": ""
+    }}
+    """
+
+    return deepseek_chat(
+        prompt=json.dumps(relation, ensure_ascii=False),
+        system_prompt=system_message,
+        # model="Qwen2.5-VL-7B-Instruct",
+    )
 
 
 def ppt_image_describer(image_path: str) -> str:
@@ -111,6 +171,98 @@ def ppt_video_describer(image_paths: list[str]) -> str:
 
 
 if __name__ == '__main__':
-    result = json.loads(ppt_image_describer(r"C:\Users\shen.xin\Downloads\0602-143.jpeg"))
-    print(result["raw_text"], '\n\n',result['summary'])
+    result = ppt_page_diff({
+    "relation": "matched",
+    "old_page": {
+      "page_num": 7,
+      "text": "巡检机器人\n挖掘机器人\n爆破装药机器人\n凿岩机器人\n井下作业机器人\n深海挖矿机器人\n「作业海拔」\n4999 m （地上）\n0m （地表）\n-1000m （地下）\n-3000m （海底）\n\n重型装备具身智能\nHeavy-Duty Embodied AI Intelligent Mobility",
+      "images": [
+        {
+          "raw_text": "",
+          "summary": "这是一幅描绘峡谷地貌的插画。画面展示了高耸的悬崖峭壁和蜿蜒的河流，表现出一种荒凉而壮丽的自然景观。"
+        },
+        {
+          "raw_text": "",
+          "summary": "一张描绘地下隧道和管道的黑白插画。隧道内有管道贯穿，外部有岩石结构和铁轨。"
+        },
+        {
+          "raw_text": "",
+          "summary": "这幅图描绘了一个海底场景，有岩石、海草、鱼群和一艘沉船。"
+        },
+        {
+          "raw_text": "",
+          "summary": "一张挖掘机的线框图，展示了其机械结构。"
+        },
+        {
+          "raw_text": "",
+          "summary": "这是一辆消防车的简笔画。"
+        },
+        {
+          "raw_text": "",
+          "summary": "这是一辆带有起重机臂的卡车的示意图。"
+        },
+        {
+          "raw_text": "",
+          "summary": "这是一张火星探测车的示意图。"
+        },
+        {
+          "raw_text": "",
+          "summary": "一张展示机械臂和履带的机器人图像。"
+        },
+        {
+          "raw_text": "",
+          "summary": "一张描绘机械战士的黑白插画。"
+        }
+      ],
+      "videos": []
+    },
+    "new_page": {
+      "page_num": 6,
+      "text": "巡检机器人\n挖掘机器人\n爆破装药机器人\n凿岩机器人\n井下作业机器人\n深海挖矿机器人\n「作业海拔」\n5000 m （地上）\n0m （地表）\n-1000m （地下）\n-3000m （海底）\n\n重型装备具身智能\nHeavy-Duty Embodied AI Intelligent Mobility",
+      "images": [
+        {
+          "raw_text": "",
+          "summary": "这是一幅描绘峡谷地貌的插画。画面中展示了高耸的悬崖峭壁和蜿蜒曲折的河流，表现出大自然的壮丽景色。"
+        },
+        {
+          "raw_text": "",
+          "summary": "一张描绘地下隧道和管道的黑白插画。隧道内有管道穿过，周围有岩石结构和铁轨。"
+        },
+        {
+          "raw_text": "",
+          "summary": "这幅图描绘了一个海底场景，有岩石、海草、鱼群、一艘沉船以及一些海洋生物。"
+        },
+        {
+          "raw_text": "",
+          "summary": "一张挖掘机的线框图，展示了其机械结构。"
+        },
+        {
+          "raw_text": "",
+          "summary": "这是一辆消防车的简笔画。"
+        },
+        {
+          "raw_text": "",
+          "summary": "这是一辆带有起重机臂的卡车的示意图。"
+        },
+        {
+          "raw_text": "",
+          "summary": "一张描绘火星探测车的黑白线条图。"
+        },
+        {
+          "raw_text": "",
+          "summary": "一张描绘了机械臂和履带的机器人图像。"
+        },
+        {
+          "raw_text": "",
+          "summary": "一张描绘机械战士的黑白插画。"
+        }
+      ],
+      "videos": []
+    },
+    "similarity": 0.9466
+  })
+    print(result)
+
+    # result = json.loads(ppt_image_describer(r"C:\Users\shen.xin\Downloads\0602-143.jpeg"))
+    # print(result["raw_text"], '\n\n',result['summary'])
 

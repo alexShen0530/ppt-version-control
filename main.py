@@ -3,18 +3,29 @@ import os
 import re
 from concurrent.futures import ThreadPoolExecutor
 
-from call_ollama import call_ollama
-from call_qwen import call_qwen_vision
 from feishu_event import FeishuEventListener
 from feishu_downloader import ppt_downloader
 from functions.doc_intelligence import parse_document, merge_markdown_by_page
 from db_store import document_store
-from deepseek_util import deepseek_chat
 from feishu_sender import send_to_feishu
-import system_prompt
 from functions.common_utils import collect_multimedia_ocr, enrich_pages_with_ocr
-from vllm_call import chat_with_vllm
+from functions.concurrent_util import execute_parallel_with_fallback
+from functions.page_matcher import match_pages
+from prompt_message import ppt_page_diff
 import config
+
+
+def _parse_page_diff(raw_result: str) -> dict:
+    try:
+        result = json.loads(raw_result)
+        if isinstance(result, dict):
+            return result
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return {
+        "has_difference": True,
+        "summary": "该页面差异分析失败，请人工检查。",
+    }
 
 
 def on_message_received(msg_data):
@@ -70,22 +81,41 @@ def on_message_received(msg_data):
             send_to_feishu(msg_data, "当前ppt没有发现历史版本，差异汇总跳过")
             return
 
-        input_text = f"""
-        旧版：
-        {json.dumps(old_doc["page_text_list"], ensure_ascii=False, indent=2)}
-
-        新版：
-        {json.dumps(page_text_list, ensure_ascii=False, indent=2)}
-        """
-
-        # diff_result = deepseek_chat(
-        #     prompt=input_text,
-        #     system_prompt=system_prompt.ppt_version_diff,
-        # )
-
-        diff_result = chat_with_vllm(
-            user_message=input_text,
-            system_message=system_prompt.ppt_version_diff,
+        relations = match_pages(old_doc["page_text_list"], page_text_list)
+        relations_to_compare = [
+            relation
+            for relation in relations
+            if not (
+                relation.get("relation") == "matched"
+                and abs((relation.get("similarity") or 0) - 1.0) < 1e-9
+            )
+        ]
+        fallback = json.dumps({
+            "has_difference": True,
+            "summary": "该页面差异分析失败，请人工检查。",
+        }, ensure_ascii=False)
+        tasks = [
+            (ppt_page_diff, (relation,), {}, f"page-diff-{index}", fallback)
+            for index, relation in enumerate(relations_to_compare, start=1)
+        ]
+        page_diff_results = execute_parallel_with_fallback(
+            tasks,
+            max_workers=2,
+            timeout_seconds=180,
+            max_retries=2,
+        )
+        parsed_results = [_parse_page_diff(item) for item in page_diff_results]
+        summaries = [
+            item["summary"].strip()
+            for item in parsed_results
+            if item.get("has_difference") and item.get("summary", "").strip()
+        ]
+        diff_result = (
+            "\n\n".join(
+                f"{index}. {summary}"
+                for index, summary in enumerate(summaries, start=1)
+            )
+            or "两个版本未发现明显内容差异。"
         )
 
         print(f"📝 差异汇总（对比历史版本: {old_doc['file_name']}）:\n{diff_result}")

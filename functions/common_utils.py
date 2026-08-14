@@ -45,16 +45,29 @@ def encode_image(image_path: str, high_resolution: bool = False) -> str:
         return base64.b64encode(buffer.getvalue()).decode("ascii")
 
 
-def extract_ppt_images(ppt_path: str, download_dir: str = config.DOWNLOAD_DIR) -> list[dict]:
+def extract_ppt_images(
+        ppt_path: str,
+        download_dir: str = config.DOWNLOAD_DIR
+) -> list[dict]:
     """
-    提取 PPT 每页中的图片。
+    提取 PPT 每页中的图片，包括组合 Group 中的图片。
 
     返回格式：
     [
-        {1: ["/xxx/page_1_image_1.png"]},
-        {2: ["/xxx/page_2_image_1.jpg", "/xxx/page_2_image_2.png"]}
+        {
+            "page_num": 1,
+            "image_paths": ["/xxx/page_1_image_1.png"]
+        },
+        {
+            "page_num": 2,
+            "image_paths": [
+                "/xxx/page_2_image_1.jpg",
+                "/xxx/page_2_image_2.png"
+            ]
+        }
     ]
     """
+
     file_name = Path(ppt_path).stem
     output_dir = Path(download_dir) / file_name
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -62,17 +75,42 @@ def extract_ppt_images(ppt_path: str, download_dir: str = config.DOWNLOAD_DIR) -
     prs = Presentation(ppt_path)
     result = []
 
+    def get_pictures(shapes):
+        """
+        递归获取所有图片 Shape。
+        """
+        for shape in shapes:
+            if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
+                yield shape
+
+            elif shape.shape_type == MSO_SHAPE_TYPE.GROUP:
+                yield from get_pictures(shape.shapes)
+
     for page_num, slide in enumerate(prs.slides, 1):
         image_paths = []
+        image_index = 1
 
-        for index, shape in enumerate(
-            (s for s in slide.shapes if s.shape_type == MSO_SHAPE_TYPE.PICTURE),
-            1
-        ):
-            image = shape.image
-            image_path = output_dir / f"page_{page_num}_image_{index}.{image.ext}"
+        for shape in get_pictures(slide.shapes):
+            try:
+                image = shape.image
+            except ValueError:
+                # PICTURE 类型，但不是内嵌图片，例如链接图片等
+                print(
+                    f"跳过非内嵌图片: "
+                    f"page={page_num}, "
+                    f"shape={shape.name}"
+                )
+                continue
+
+            image_path = (
+                output_dir
+                / f"page_{page_num}_image_{image_index}.{image.ext}"
+            )
+
             image_path.write_bytes(image.blob)
             image_paths.append(str(image_path))
+
+            image_index += 1
 
         if image_paths:
             result.append({
@@ -181,4 +219,4 @@ def enrich_pages_with_ocr(
     return enriched
 
 if __name__ == "__main__":
-    print(extract_ppt_images(r"C:\Users\shen.xin\Downloads\AI&财务\AI智算中心&财务P1工作.pptx"))
+    print(extract_ppt_images(r"C:\Users\shen.xin\Downloads\AI&财务\希迪智驾公司介绍V1.pptx"))
