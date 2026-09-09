@@ -84,7 +84,7 @@ def save_pages_to_json(pages: list[dict], output_path: str) -> None:
 
 
 if __name__ == "__main__":
-    input_path = r"C:\Users\shen.xin\Downloads\AI&财务\希迪智驾公司介绍V1.pptx"
+    input_path = r"C:\Users\shen.xin\Downloads\AI&财务\AI落地应用场景规划V1.pptx"
     result = parse_document(input_path)
     # print(result)
     pages = merge_markdown_by_page(result)

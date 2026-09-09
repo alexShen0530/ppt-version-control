@@ -4,7 +4,7 @@ from functions.common_utils import encode_image
 import json
 import re
 
-VLLM_URL = "http://172.16.41.37:7090/v1"
+VLLM_URL = "http://172.16.200.96:8000/v1"
 
 client = OpenAI(
     base_url=VLLM_URL,
@@ -16,7 +16,7 @@ def chat_with_vllm(
     user_message: str,
     system_message: str,
     image_paths: list[str] | None = None,
-    model: str = "Qwen2.5-VL-7B-Instruct",
+    model: str = "Qwen3-VL-8B-Instruct",
     high_resolution: bool = True,
 ) -> str:
     """调用 vLLM 部署的 Qwen2.5 文本或视觉模型，支持多张本地图片。"""
@@ -39,9 +39,13 @@ def chat_with_vllm(
                 {"role": "system", "content": system_message},
                 {"role": "user", "content": content},
             ],
-            temperature=0.1,
-            max_tokens=2000,
-            extra_body={"repetition_penalty": 1.05},
+            temperature=0.7,
+            top_p=0.8,
+            max_tokens=1200,
+            extra_body={
+                "top_k": 20,
+                "repetition_penalty": 1.0,
+            },
         )
 
         result = response.choices[0].message.content or ""
@@ -104,8 +108,6 @@ if __name__ == "__main__":
     要求：
     只输出合法 JSON，不要使用** Markdown 代码块**，不要输出 ```json 或 ```，不要输出任何额外说明。
         """
-    result = chat_with_vllm('',system_message, model="Qwen2.5-VL-7B-Instruct", image_paths=[r"C:\Users\shen.xin\Downloads\1.png"])
+    result = chat_with_vllm('你知道希迪智驾么 讲讲','', model="Qwen3-VL-8B-Instruct", image_paths=[])
     print(result)
-
-    print(json.loads(result))
 

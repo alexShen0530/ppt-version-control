@@ -117,7 +117,7 @@ def ppt_image_describer(image_path: str) -> str:
 只输出合法 JSON，不要使用** Markdown 代码块**，不要输出 ```json 或 ```，不要输出任何额外说明。
     """
 
-    return chat_with_vllm('', system_message,[image_path], model="Qwen2.5-VL-7B-Instruct")
+    return chat_with_vllm('', system_message,[image_path], model="Qwen3-VL-8B-Instruct")
 
 
 def ppt_video_describer(image_paths: list[str]) -> str:
@@ -165,7 +165,7 @@ def ppt_video_describer(image_paths: list[str]) -> str:
 只输出 JSON，不输出其他内容。
 """
 
-    return chat_with_vllm('', system_message, image_paths, model="Qwen2.5-VL-7B-Instruct")
+    return chat_with_vllm('', system_message, image_paths, model="Qwen3-VL-8B-Instruct")
 
 
 
