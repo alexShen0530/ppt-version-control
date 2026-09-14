@@ -24,5 +24,15 @@ BAILIAN_API_KEY = os.getenv('BAILIAN_API_KEY')
 DB_PATH = os.getenv('DB_PATH') or os.path.join(DOWNLOAD_DIR, 'documents.db')
 
 
+DB_CONFIG = {
+    "host": os.getenv('PPT_DB_HOST'),
+    "port": os.getenv('PPT_DB_PORT'),
+    "dbname": os.getenv('PPT_DB_NAME'),
+    "user": os.getenv('PPT_DB_USER'),
+    "password": os.getenv('PPT_DB_PASSWORD'),
+}
+
+
+
 
 
