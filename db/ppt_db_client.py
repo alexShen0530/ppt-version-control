@@ -70,6 +70,9 @@ class PPTDatabaseClient:
 
         CREATE UNIQUE INDEX IF NOT EXISTS idx_pages_source_file_revision_group
         ON pages(source_file_name, revision_group_id);
+
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_pages_revision_group_revision_no
+        ON pages(revision_group_id, revision_no);
         """
 
         with self.conn.cursor() as cur:
@@ -87,7 +90,7 @@ class PPTDatabaseClient:
         embedding: List[float],
         screenshot_path: str,
         revision_group_id: Optional[str] = None,
-        revision_no: int = 1,
+        revision_no: Optional[int] = None,
         page_id: Optional[str] = None,
     ) -> str:
 
@@ -96,6 +99,9 @@ class PPTDatabaseClient:
 
         if revision_group_id is None:
             revision_group_id = page_id
+            revision_no = 1
+
+        atomic_revision = revision_no is None
 
         sql = """
         INSERT INTO pages (
@@ -137,10 +143,28 @@ class PPTDatabaseClient:
             "revision_no": revision_no,
         }
 
-        with self.conn.cursor() as cur:
-            cur.execute(sql, params)
+        try:
+            with self.conn.cursor() as cur:
+                if atomic_revision:
+                    cur.execute(
+                        "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0));",
+                        (revision_group_id,),
+                    )
+                    cur.execute(
+                        """
+                        SELECT COALESCE(MAX(revision_no), 0) + 1 AS revision_no
+                        FROM pages
+                        WHERE revision_group_id = %s;
+                        """,
+                        (revision_group_id,),
+                    )
+                    params["revision_no"] = cur.fetchone()["revision_no"]
+                cur.execute(sql, params)
 
-        self.conn.commit()
+            self.conn.commit()
+        except Exception:
+            self.conn.rollback()
+            raise
 
         return page_id
 
@@ -225,6 +249,26 @@ class PPTDatabaseClient:
         excluded_revision_group_ids = excluded_revision_group_ids or []
 
         sql = """
+        WITH latest_pages AS (
+            SELECT DISTINCT ON (revision_group_id)
+                page_id,
+                topic_id,
+                source_file_name,
+                source_page_no,
+                page_hash,
+                match_text,
+                embedding,
+                screenshot_path,
+                revision_group_id,
+                revision_no,
+                created_at
+            FROM pages
+            WHERE topic_id = %s
+              AND embedding IS NOT NULL
+              AND source_file_name <> %s
+              AND revision_group_id <> ALL(%s::uuid[])
+            ORDER BY revision_group_id, revision_no DESC, created_at DESC
+        )
         SELECT
             page_id,
             topic_id,
@@ -237,11 +281,7 @@ class PPTDatabaseClient:
             revision_no,
             created_at,
             1 - (embedding <=> %s::vector) AS similarity
-        FROM pages
-        WHERE topic_id = %s
-          AND embedding IS NOT NULL
-          AND source_file_name <> %s
-          AND revision_group_id <> ALL(%s::uuid[])
+        FROM latest_pages
         ORDER BY embedding <=> %s::vector
         LIMIT %s;
         """
@@ -250,10 +290,10 @@ class PPTDatabaseClient:
             cur.execute(
                 sql,
                 (
-                    embedding,
                     topic_id,
                     source_file_name,
                     excluded_revision_group_ids,
+                    embedding,
                     embedding,
                     top_k,
                 ),

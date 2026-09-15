@@ -11,7 +11,7 @@ from feishu_sender import send_to_feishu
 from functions.common_utils import collect_multimedia_ocr, enrich_pages_with_ocr
 from functions.concurrent_util import execute_parallel_with_fallback
 from functions.page_matcher import match_pages
-from prompt_message import ppt_page_diff
+from functions.prompt_message import ppt_page_diff
 import config
 
 

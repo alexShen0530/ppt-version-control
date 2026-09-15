@@ -5,7 +5,7 @@ from db.ppt_db_client import PPTDatabaseClient
 from functions.page_hash import PageHash
 from functions.ppt_to_images import ppt_to_images
 from functions.qwen_embedding import QwenEmbeddingClient
-from prompt_message import ppt_page_describer
+from functions.prompt_message import ppt_page_describer
 
 
 DEFAULT_TOPIC_ID = "default_topic"

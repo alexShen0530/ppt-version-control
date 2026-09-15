@@ -124,7 +124,7 @@ def extract_ppt_images(
 def collect_multimedia_ocr(ppt_path: str) -> dict:
     """并行识别PPT中的图片与视频，返回按页分组的结果。"""
     # 延迟导入，避免循环依赖（prompt_message -> call_qwen -> common_utils）
-    from prompt_message import ppt_image_describer, ppt_video_describer
+    from functions.prompt_message import ppt_image_describer, ppt_video_describer
     from functions.concurrent_util import execute_parallel_with_fallback
     from functions.video_extractor import process_ppt_videos
 
