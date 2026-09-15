@@ -1,13 +1,11 @@
 import json
-import os
 from pathlib import Path
 
 from alibabacloud_docmind_api20220711.client import Client
 from alibabacloud_docmind_api20220711 import models
 from alibabacloud_tea_openapi import models as open_api_models
 from alibabacloud_tea_util import models as util_models
-from config import ALIBABA_CLOUD_ACCESS_KEY_ID, ALIBABA_CLOUD_ACCESS_KEY_SECRET
-import config
+from backend.config import ALIBABA_CLOUD_ACCESS_KEY_ID, ALIBABA_CLOUD_ACCESS_KEY_SECRET
 
 
 def parse_document(file_path: str):

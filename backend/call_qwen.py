@@ -1,8 +1,4 @@
-import base64
-import io
-
 from openai import OpenAI
-from PIL import Image
 import config
 from functions.common_utils import encode_image
 

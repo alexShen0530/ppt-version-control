@@ -3,12 +3,12 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Lock
 
-import config
-from db.ppt_db_client import PPTDatabaseClient
-from functions.page_hash import PageHash
-from functions.ppt_to_images import ppt_to_images
-from functions.qwen_embedding import QwenEmbeddingClient
-from functions.prompt_message import ppt_page_describer, ppt_page_diff_analyzer
+from backend import config
+from backend.db.ppt_db_client import PPTDatabaseClient
+from backend.functions.page_hash import PageHash
+from backend.functions.ppt_to_images import ppt_to_images
+from backend.functions.qwen_embedding import QwenEmbeddingClient
+from backend.functions.prompt_message import ppt_page_describer, ppt_page_diff_analyzer
 
 
 TOPIC_ID = "default_topic"
@@ -154,5 +154,5 @@ def process_ppt(ppt_path: str) -> list[dict]:
         return list(executor.map(process_page, enumerate(image_paths, 1)))
 
 if __name__ == "__main__":
-    result = process_ppt(r"C:\Users\shen.xin\Downloads\AI&财务\test\test2.pptx")
+    result = process_ppt(r"C:\Users\shen.xin\Downloads\AI&财务\AI落地应用场景规划V2.pptx")
     print(result)

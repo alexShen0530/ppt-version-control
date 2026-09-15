@@ -1,11 +1,11 @@
 from pathlib import Path
 
-import config
-from db.ppt_db_client import PPTDatabaseClient
-from functions.page_hash import PageHash
-from functions.ppt_to_images import ppt_to_images
-from functions.qwen_embedding import QwenEmbeddingClient
-from functions.prompt_message import ppt_page_describer
+from backend import config
+from backend.db.ppt_db_client import PPTDatabaseClient
+from backend.functions.page_hash import PageHash
+from backend.functions.ppt_to_images import ppt_to_images
+from backend.functions.qwen_embedding import QwenEmbeddingClient
+from backend.functions.prompt_message import ppt_page_describer
 
 
 DEFAULT_TOPIC_ID = "default_topic"

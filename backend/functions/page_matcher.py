@@ -6,8 +6,8 @@ from concurrent.futures import ThreadPoolExecutor
 from difflib import SequenceMatcher
 from typing import Any
 
-from functions.common_utils import collect_multimedia_ocr, enrich_pages_with_ocr
-from functions.doc_intelligence import parse_document, merge_markdown_by_page
+from backend.functions.common_utils import collect_multimedia_ocr, enrich_pages_with_ocr
+from backend.functions.doc_intelligence import parse_document, merge_markdown_by_page
 
 
 Page = dict[str, Any]

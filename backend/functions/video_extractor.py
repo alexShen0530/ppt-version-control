@@ -16,7 +16,6 @@ import zipfile
 from pathlib import Path
 from typing import Optional
 import cv2
-import config
 
 # 常见视频后缀 (pptx 里嵌入的媒体格式)
 VIDEO_EXTENSIONS = (".mp4", ".avi", ".wmv", ".mov", ".m4v", ".mkv", ".flv", ".webm")

@@ -2,7 +2,7 @@ import os
 import re
 import win32com.client
 
-import config
+from backend import config
 
 
 def ppt_to_images(ppt_path: str, output_dir: str):

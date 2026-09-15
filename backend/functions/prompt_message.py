@@ -1,8 +1,7 @@
 import json
 
-from call_qwen import call_qwen_vision
-from vllm_call import chat_with_vllm
-from deepseek_util import deepseek_chat
+from backend.functions.vllm_call import chat_with_vllm
+from backend.functions.deepseek_util import deepseek_chat
 
 
 def ppt_page_diff(relation: dict) -> str:

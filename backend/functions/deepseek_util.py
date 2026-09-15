@@ -2,8 +2,7 @@ import json
 
 from openai import OpenAI
 from typing import Optional, List, Dict, Any
-import config
-import system_prompt
+from backend import config, system_prompt
 
 
 class DeepSeekClient:

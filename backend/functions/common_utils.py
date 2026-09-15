@@ -7,7 +7,7 @@ from PIL import Image
 from pathlib import Path
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
-import config
+from backend import config
 
 
 def clean_page_text_list(page_text_list: list[dict]) -> list[dict]:
@@ -124,9 +124,9 @@ def extract_ppt_images(
 def collect_multimedia_ocr(ppt_path: str) -> dict:
     """并行识别PPT中的图片与视频，返回按页分组的结果。"""
     # 延迟导入，避免循环依赖（prompt_message -> call_qwen -> common_utils）
-    from functions.prompt_message import ppt_image_describer, ppt_video_describer
-    from functions.concurrent_util import execute_parallel_with_fallback
-    from functions.video_extractor import process_ppt_videos
+    from backend.functions.prompt_message import ppt_image_describer, ppt_video_describer
+    from backend.functions.concurrent_util import execute_parallel_with_fallback
+    from backend.functions.video_extractor import process_ppt_videos
 
     def parse_result(raw: str) -> dict:
         try:

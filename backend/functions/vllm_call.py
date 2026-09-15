@@ -1,7 +1,6 @@
 from openai import OpenAI
 
-from functions.common_utils import encode_image
-import json
+from backend.functions.common_utils import encode_image
 import re
 
 VLLM_URL = "http://172.16.200.96:8000/v1"

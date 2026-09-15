@@ -4,7 +4,6 @@ from threading import Lock
 from lark_oapi.ws import Client
 from lark_oapi.event.dispatcher_handler import EventDispatcherHandler
 import config
-import json
 from db_store import document_store
 
 
