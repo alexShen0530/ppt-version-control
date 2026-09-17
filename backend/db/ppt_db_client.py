@@ -36,6 +36,12 @@ class PPTDatabaseClient:
         sql = """
         CREATE EXTENSION IF NOT EXISTS vector;
 
+        CREATE TABLE IF NOT EXISTS topics (
+            topic_id VARCHAR(255) PRIMARY KEY,
+            name TEXT NOT NULL CHECK (btrim(name) <> ''),
+            created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
         CREATE TABLE IF NOT EXISTS pages (
             page_id UUID PRIMARY KEY,
             topic_id VARCHAR(255) NOT NULL,
@@ -53,8 +59,56 @@ class PPTDatabaseClient:
             revision_group_id UUID NOT NULL,
             revision_no INTEGER NOT NULL DEFAULT 1 CHECK (revision_no > 0),
 
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         );
+
+        ALTER TABLE pages ADD COLUMN IF NOT EXISTS title TEXT;
+        ALTER TABLE pages ADD COLUMN IF NOT EXISTS change_note TEXT;
+        ALTER TABLE pages ADD COLUMN IF NOT EXISTS source_ppt_path TEXT;
+
+        CREATE TABLE IF NOT EXISTS upload_tasks (
+            upload_id UUID PRIMARY KEY,
+            file_name TEXT NOT NULL,
+            topic_id VARCHAR(255) NOT NULL,
+            source_ppt_path TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending'
+                CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+            total_pages INTEGER NOT NULL DEFAULT 0,
+            processed_pages INTEGER NOT NULL DEFAULT 0,
+            new_page_ids UUID[] NOT NULL DEFAULT '{}',
+            updated_group_ids UUID[] NOT NULL DEFAULT '{}',
+            error TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            expires_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP + INTERVAL '24 hours'
+        );
+
+        ALTER TABLE export_tasks ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+        UPDATE export_tasks
+        SET expires_at = created_at + INTERVAL '24 hours'
+        WHERE expires_at IS NULL;
+        ALTER TABLE export_tasks
+        ALTER COLUMN expires_at SET DEFAULT CURRENT_TIMESTAMP + INTERVAL '24 hours';
+        ALTER TABLE export_tasks ALTER COLUMN expires_at SET NOT NULL;
+
+        CREATE INDEX IF NOT EXISTS idx_export_tasks_expires_at
+        ON export_tasks(expires_at);
+
+        CREATE TABLE IF NOT EXISTS export_tasks (
+            export_id UUID PRIMARY KEY,
+            topic_id VARCHAR(255) NOT NULL,
+            page_ids UUID[] NOT NULL,
+            status TEXT NOT NULL DEFAULT 'processing'
+                CHECK (status IN ('processing', 'completed', 'failed')),
+            output_path TEXT,
+            error TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        DROP INDEX IF EXISTS idx_upload_tasks_topic_file;
+        CREATE UNIQUE INDEX idx_upload_tasks_topic_file
+        ON upload_tasks(topic_id, file_name) WHERE status <> 'failed';
 
         CREATE INDEX IF NOT EXISTS idx_pages_topic_id
         ON pages(topic_id);
@@ -65,11 +119,13 @@ class PPTDatabaseClient:
         CREATE INDEX IF NOT EXISTS idx_pages_revision_group_id
         ON pages(revision_group_id);
 
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_pages_source_file_page
-        ON pages(source_file_name, source_page_no);
+        DROP INDEX IF EXISTS idx_pages_source_file_page;
+        CREATE UNIQUE INDEX idx_pages_source_file_page
+        ON pages(topic_id, source_file_name, source_page_no);
 
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_pages_source_file_revision_group
-        ON pages(source_file_name, revision_group_id);
+        DROP INDEX IF EXISTS idx_pages_source_file_revision_group;
+        CREATE UNIQUE INDEX idx_pages_source_file_revision_group
+        ON pages(topic_id, source_file_name, revision_group_id);
 
         CREATE UNIQUE INDEX IF NOT EXISTS idx_pages_revision_group_revision_no
         ON pages(revision_group_id, revision_no);
@@ -89,6 +145,9 @@ class PPTDatabaseClient:
         match_text: str,
         embedding: List[float],
         screenshot_path: str,
+        title: Optional[str] = None,
+        change_note: Optional[str] = None,
+        source_ppt_path: Optional[str] = None,
         revision_group_id: Optional[str] = None,
         revision_no: Optional[int] = None,
         page_id: Optional[str] = None,
@@ -113,6 +172,9 @@ class PPTDatabaseClient:
             match_text,
             embedding,
             screenshot_path,
+            title,
+            change_note,
+            source_ppt_path,
             revision_group_id,
             revision_no
         )
@@ -125,6 +187,9 @@ class PPTDatabaseClient:
             %(match_text)s,
             %(embedding)s,
             %(screenshot_path)s,
+            %(title)s,
+            %(change_note)s,
+            %(source_ppt_path)s,
             %(revision_group_id)s,
             %(revision_no)s
         );
@@ -139,6 +204,9 @@ class PPTDatabaseClient:
             "match_text": match_text,
             "embedding": embedding,
             "screenshot_path": screenshot_path,
+            "title": title,
+            "change_note": change_note,
+            "source_ppt_path": source_ppt_path,
             "revision_group_id": revision_group_id,
             "revision_no": revision_no,
         }
@@ -371,3 +439,20 @@ class PPTDatabaseClient:
         with self.conn.cursor() as cur:
             cur.execute(sql, (revision_group_id,))
             return cur.fetchall()
+
+    def execute(self, sql: str, params=(), fetch: str | None = None):
+        """Run one transactional statement for the API service layer."""
+        try:
+            with self.conn.cursor() as cur:
+                cur.execute(sql, params)
+                if fetch == "one":
+                    result = cur.fetchone()
+                elif fetch == "all":
+                    result = cur.fetchall()
+                else:
+                    result = None
+            self.conn.commit()
+            return result
+        except Exception:
+            self.conn.rollback()
+            raise

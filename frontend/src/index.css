@@ -1,0 +1,99 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---------------------------------------------------------------------------
+   设计令牌
+   冷灰纸面 + 单一「蓝图纸靛蓝」。墨黑承担动作，靛蓝只承担状态。
+   --------------------------------------------------------------------------- */
+@layer base {
+  :root {
+    --c-paper: 245 246 248; /* #F5F6F8 */
+    --c-surface: 255 255 255; /* #FFFFFF */
+    --c-raised: 250 251 252; /* #FAFBFC */
+    --c-ink: 23 26 32; /* #171A20 */
+    --c-inksoft: 65 74 88; /* #414A58 */
+    --c-slate: 107 116 130; /* #6B7482 */
+    --c-faint: 152 160 172; /* #98A0AC */
+    --c-line: 229 232 237; /* #E5E8ED */
+    --c-line2: 211 216 224; /* #D3D8E0 */
+    --c-blueprint: 45 70 185; /* #2D46B9 */
+    --c-success: 31 122 91; /* #1F7A5B */
+    --c-danger: 180 52 42; /* #B4342A */
+    --c-warn: 150 105 15; /* #96690F */
+  }
+
+  * {
+    @apply border-line;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-paper font-sans text-ink antialiased;
+    font-feature-settings: 'cv05' 1;
+    text-rendering: optimizeLegibility;
+    overflow: hidden;
+  }
+
+  /* 键盘焦点必须可见 */
+  :focus-visible {
+    outline: 2px solid rgb(var(--c-blueprint));
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: rgb(var(--c-blueprint) / 0.18);
+  }
+
+  /* 密集工具型界面：细滚动条，不与内容抢注意力 */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgb(var(--c-line2));
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--c-faint));
+    background-clip: content-box;
+  }
+}
+
+@layer utilities {
+  /* 数字对齐：页码、版本号、计数 */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* 16:9 是这个产品唯一神圣的比例 */
+  .ratio-slide {
+    aspect-ratio: 16 / 9;
+  }
+
+  .scroll-area {
+    scrollbar-gutter: stable;
+  }
+}
+
+/* 动效只回应用户动作，且尊重系统偏好 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -11,11 +11,24 @@ from backend.functions.qwen_embedding import QwenEmbeddingClient
 from backend.functions.prompt_message import ppt_page_describer, ppt_page_diff_analyzer
 
 
-TOPIC_ID = "default_topic"
+TOPIC_ID = "2a8ea8ab-3207-43e8-a7a6-1460b6fb61a3"
 SIMILARITY_THRESHOLD = 0.75
 
 
-def process_ppt(ppt_path: str) -> list[dict]:
+def _title(match_text: str) -> str:
+    marker = "【标题】"
+    if marker not in match_text:
+        return "未命名页面"
+    value = match_text.split(marker, 1)[1].split("【", 1)[0].strip()
+    return value.splitlines()[0].strip() if value else "未命名页面"
+
+
+def process_ppt(
+    ppt_path: str,
+    topic_id: str = TOPIC_ID,
+    progress_callback=None,
+    pages_dir: str | None = None,
+) -> list[dict]:
     path = Path(ppt_path).resolve()
     if not path.is_file() or path.suffix.lower() not in {".ppt", ".pptx"}:
         raise ValueError(f"无效的 PPT 文件: {path}")
@@ -23,12 +36,23 @@ def process_ppt(ppt_path: str) -> list[dict]:
     db = PPTDatabaseClient(**config.DB_CONFIG)
     try:
         db.create_table()
-        image_paths = ppt_to_images(str(path), config.DOWNLOAD_DIR)
+        image_paths = ppt_to_images(
+            str(path),
+            pages_dir or str(path.parent / "pages"),
+            flat_output=pages_dir is not None,
+        )
+        if progress_callback:
+            progress_callback({"total_pages": len(image_paths)})
     finally:
         db.close()
 
     used_revision_group_ids: set[str] = set()
     group_lock = Lock()
+
+    def complete(result: dict) -> dict:
+        if progress_callback:
+            progress_callback(result)
+        return result
 
     def process_page(item: tuple[int, str]) -> dict:
         page_no, image_path = item
@@ -49,21 +73,21 @@ def process_ppt(ppt_path: str) -> list[dict]:
         try:
             while True:
                 existing = page_db.find_by_hash(
-                    TOPIC_ID, page_hash, path.name, excluded_groups()
+                    topic_id, page_hash, path.name, excluded_groups()
                 )
                 if not existing:
                     break
                 group_id = str(existing["revision_group_id"])
                 if claim_group(group_id):
-                    return {
+                    return complete({
                         "source_page_no": page_no,
                         "classification": "same_revision",
                         "message": "页面hash一致,页面已存在",
                         "matched_page_id": str(existing["page_id"]),
-                    }
+                    })
 
             match_text = ppt_page_describer(image_path)
-            print(match_text)
+            # print(match_text)
             embedding = QwenEmbeddingClient().embed(match_text)
 
             def insert_new_page(
@@ -71,8 +95,10 @@ def process_ppt(ppt_path: str) -> list[dict]:
                 reason: str = "",
             ) -> dict:
                 page_id = page_db.insert_page(
-                    TOPIC_ID, path.name, page_no, page_hash,
+                    topic_id, path.name, page_no, page_hash,
                     match_text, embedding, image_path,
+                    title=_title(match_text),
+                    source_ppt_path=str(path),
                 )
                 result = {
                     "source_page_no": page_no,
@@ -82,11 +108,11 @@ def process_ppt(ppt_path: str) -> list[dict]:
                 }
                 if similarity is not None:
                     result.update(similarity=similarity, reason=reason)
-                return result
+                return complete(result)
 
             while True:
                 candidates = page_db.search_similar_pages(
-                    TOPIC_ID,
+                    topic_id,
                     embedding,
                     path.name,
                     excluded_groups(),
@@ -118,26 +144,29 @@ def process_ppt(ppt_path: str) -> list[dict]:
                     continue
 
                 if result == "same_page_same_revision":
-                    return {
+                    return complete({
                         "source_page_no": page_no,
                         "classification": "same_revision",
                         "message": "页面已存在",
                         "matched_page_id": str(candidate["page_id"]),
                         "similarity": float(candidate["similarity"]),
                         "reason": analysis.get("reason", ""),
-                    }
+                    })
 
                 page_id = page_db.insert_page(
-                    TOPIC_ID,
+                    topic_id,
                     path.name,
                     page_no,
                     page_hash,
                     match_text,
                     embedding,
                     image_path,
+                    title=_title(match_text),
+                    change_note=analysis.get("reason", ""),
+                    source_ppt_path=str(path),
                     revision_group_id=group_id,
                 )
-                return {
+                return complete({
                     "source_page_no": page_no,
                     "classification": "new_revision",
                     "message": "存在页面新版本添加",
@@ -146,7 +175,7 @@ def process_ppt(ppt_path: str) -> list[dict]:
                     "revision_group_id": group_id,
                     "similarity": float(candidate["similarity"]),
                     "reason": analysis.get("reason", ""),
-                }
+                })
         finally:
             page_db.close()
 
@@ -154,5 +183,5 @@ def process_ppt(ppt_path: str) -> list[dict]:
         return list(executor.map(process_page, enumerate(image_paths, 1)))
 
 if __name__ == "__main__":
-    result = process_ppt(r"C:\Users\shen.xin\Downloads\AI&财务\AI落地应用场景规划V2.pptx")
+    result = process_ppt(r"C:\Users\shen.xin\Downloads\AI&财务\AI落地应用场景规划V3.pptx")
     print(result)

@@ -32,6 +32,8 @@ DB_CONFIG = {
     "password": os.getenv('PPT_DB_PASSWORD'),
 }
 
+PPT_STORAGE_DIR = os.getenv("PPT_STORAGE_DIR")
+
 
 
 
