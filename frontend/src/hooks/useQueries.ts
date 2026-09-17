@@ -3,12 +3,14 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tansta
 import {
   createTopic,
   deleteRevision,
+  deleteRevisionGroup,
   deleteTopic,
   exportPpt,
   getExportStatus,
   getRevisionGroup,
   getUploadStatus,
   listMasterPages,
+  listUploads,
   listExports,
   listTopics,
   renameTopic,
@@ -25,6 +27,7 @@ export const qk = {
   masterPages: (topicId: string) => ['master-pages', topicId] as const,
   group: (groupId: string) => ['revision-group', groupId] as const,
   upload: (uploadId: string) => ['upload', uploadId] as const,
+  uploads: ['uploads'] as const,
   export: (exportId: string) => ['export', exportId] as const,
   exports: ['exports'] as const,
 }
@@ -211,6 +214,17 @@ async function applyUploadResult(qc: QueryClient, task: UploadTask) {
   }
 }
 
+/** 整组移除的缓存收尾：删版本缓存、把卡片从页面池摘掉、刷新主题计数 */
+function dropGroupFromCache(qc: QueryClient, topicId: string, groupId: string) {
+  qc.removeQueries({ queryKey: qk.group(groupId) })
+  qc.setQueryData<MasterPageResponse>(qk.masterPages(topicId), (old) => {
+    if (!old) return old
+    const pages = old.pages.filter((p) => p.revision_group_id !== groupId)
+    return { total: pages.length, pages }
+  })
+  qc.invalidateQueries({ queryKey: qk.topics })
+}
+
 /**
  * 删除某一版：版本缓存就地替换成顺排后的结果，页面池卡片同步指向新最新版；
  * 整组被删时移除卡片和版本缓存。
@@ -223,12 +237,7 @@ export function useDeleteRevision() {
     onSuccess: (res, vars) => {
       const { detail, topic_id } = res
       if (!detail) {
-        qc.removeQueries({ queryKey: qk.group(vars.groupId) })
-        qc.setQueryData<MasterPageResponse>(qk.masterPages(topic_id), (old) => {
-          if (!old) return old
-          const pages = old.pages.filter((p) => p.revision_group_id !== vars.groupId)
-          return { total: pages.length, pages }
-        })
+        dropGroupFromCache(qc, topic_id, vars.groupId)
         return
       }
 
@@ -256,6 +265,15 @@ export function useDeleteRevision() {
         return { total: pages.length, pages }
       })
     },
+  })
+}
+
+/** 删除整个 revision_group（该页全部版本） */
+export function useDeleteRevisionGroup() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (groupId: string) => deleteRevisionGroup(groupId),
+    onSuccess: (res, groupId) => dropGroupFromCache(qc, res.topic_id, groupId),
   })
 }
 
@@ -287,6 +305,17 @@ export function useExportTask(exportId: string | null) {
     },
     staleTime: 0,
     gcTime: 10 * 60_000,
+  })
+}
+
+export function useUploadHistory(enabled: boolean) {
+  return useQuery({
+    queryKey: qk.uploads,
+    queryFn: listUploads,
+    enabled,
+    refetchInterval: (query) => query.state.data?.some((task) =>
+      task.status === 'pending' || task.status === 'processing') ? 2000 : false,
+    staleTime: 0,
   })
 }
 

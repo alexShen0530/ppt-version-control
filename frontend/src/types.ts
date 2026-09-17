@@ -68,6 +68,20 @@ export interface ExportTask {
   expires_at?: string
 }
 
+export interface UploadRecord {
+  upload_id: string
+  file_name: string
+  topic_id: string
+  topic_name: string | null
+  status: UploadStatus
+  total_pages: number
+  processed_pages: number
+  new_pages_count: number
+  updated_groups_count: number
+  error: string | null
+  created_at: string
+}
+
 export type SortKey = 'updated_desc' | 'updated_asc' | 'title_asc' | 'revision_desc'
 
 export interface PoolFilters {

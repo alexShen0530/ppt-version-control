@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Check, Maximize2, Plus, X } from 'lucide-react'
+import { Check, Maximize2, Plus, Trash2, X } from 'lucide-react'
 import { Button } from './ui/Button'
 import { Dialog } from './ui/Dialog'
 import { RevisionRail } from './RevisionRail'
@@ -21,6 +21,7 @@ export function PagePreview() {
   const setRevisionNo = useNavStore((s) => s.setRevisionNo)
   const closeGroup = useNavStore((s) => s.closeGroup)
   const setViewerOpen = useNavStore((s) => s.setViewerOpen)
+  const requestDeleteGroup = useNavStore((s) => s.requestDeleteGroup)
   const isDesktop = useMediaQuery('(min-width: 1280px)')
 
   const { data: detail, isPending } = useRevisionGroup(groupId)
@@ -45,6 +46,12 @@ export function PagePreview() {
   const [pendingVersion, setPendingVersion] = useState<RevisionVersion | null>(null)
 
   const title = detail?.title ?? master?.title ?? '页面详情'
+
+  // 整组删除：与卡片入口共用 nav store 驱动的确认弹窗，本处只负责投递
+  function handleDeleteGroup() {
+    if (!topicId || !groupId) return
+    requestDeleteGroup({ groupId, topicId, title })
+  }
 
   function handleSelectVersion(revisionNo: number) {
     setRevisionNo(revisionNo)
@@ -128,6 +135,17 @@ export function PagePreview() {
           <h2 className="min-w-0 flex-1 truncate text-base font-semibold text-ink" title={title}>
             {title}
           </h2>
+          {groupId ? (
+            <button
+              type="button"
+              onClick={handleDeleteGroup}
+              aria-label="删除这一页"
+              title="删除这一页（含全部版本）"
+              className="grid h-7 w-7 shrink-0 place-items-center rounded-field text-mute transition-colors hover:bg-danger/10 hover:text-danger"
+            >
+              <Trash2 size={14} strokeWidth={2} />
+            </button>
+          ) : null}
           {groupId ? (
             <button
               type="button"

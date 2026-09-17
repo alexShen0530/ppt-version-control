@@ -20,6 +20,7 @@ import type {
   RevisionGroupDetail,
   Topic,
   UploadTask,
+  UploadRecord,
 } from '@/types'
 
 /** 置为 false 即切到真实后端，其余代码不需要改动 */
@@ -200,16 +201,42 @@ export async function deleteRevision(groupId: string, pageId: string): Promise<D
   }
 }
 
+/* ------------------------------------------------------------ 删除整页 */
+
+export interface DeleteRevisionGroupResult {
+  topic_id: string
+}
+
+/** 删除整个 revision_group（该页全部版本）。 */
+export async function deleteRevisionGroup(groupId: string): Promise<DeleteRevisionGroupResult> {
+  if (!USE_MOCK) {
+    return http<DeleteRevisionGroupResult>(`/revision-groups/${groupId}`, { method: 'DELETE' })
+  }
+  await wait(180)
+  if (!MOCK_GROUPS.has(groupId)) throw new Error('找不到这个页面的版本记录，它可能已被删除')
+  const topicId = MOCK_GROUP_TOPIC.get(groupId) ?? ''
+  MOCK_GROUPS.delete(groupId)
+  MOCK_GROUP_TOPIC.delete(groupId)
+  const pool = MOCK_MASTER_BY_TOPIC.get(topicId)
+  if (pool) {
+    const at = pool.findIndex((p) => p.revision_group_id === groupId)
+    if (at !== -1) pool.splice(at, 1)
+  }
+  const topic = MOCK_TOPICS.find((t) => t.topic_id === topicId)
+  if (topic) topic.page_count = pool?.length ?? topic.page_count
+  return { topic_id: topicId }
+}
+
 /* ---------------------------------------------------------------- 上传 */
 
-interface UploadRecord {
+interface MockUploadRecord {
   task: UploadTask
   startedAt: number
   msPerPage: number
   materialized: boolean
 }
 
-const uploads = new Map<string, UploadRecord>()
+const uploads = new Map<string, MockUploadRecord>()
 let uploadSeq = 0
 
 export interface UploadReceipt {
@@ -360,6 +387,23 @@ export async function getExportStatus(exportId: string): Promise<ExportTask> {
   }
 
   return { ...record.task }
+}
+
+export async function listUploads(): Promise<UploadRecord[]> {
+  if (!USE_MOCK) return http<UploadRecord[]>('/uploads')
+  return Array.from(uploads.values()).map(({ task, startedAt }) => ({
+    upload_id: task.upload_id,
+    file_name: task.file_name,
+    topic_id: task.topic_id,
+    topic_name: MOCK_TOPICS.find((topic) => topic.topic_id === task.topic_id)?.name ?? null,
+    status: task.status,
+    total_pages: task.total_pages,
+    processed_pages: task.processed_pages,
+    new_pages_count: task.new_pages.length,
+    updated_groups_count: task.updated_groups.length,
+    error: task.error ?? null,
+    created_at: new Date(startedAt).toISOString(),
+  })).sort((a, b) => b.created_at.localeCompare(a.created_at))
 }
 
 export async function listExports(): Promise<ExportTask[]> {

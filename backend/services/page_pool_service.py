@@ -182,5 +182,31 @@ def delete_revision(group_id: str, page_id: str) -> dict | None:
         db.close()
 
 
+def delete_revision_group(group_id: str) -> dict | None:
+    """删除整个 revision_group（该页全部版本），并 best-effort 清理截图文件。"""
+    db = _db()
+    try:
+        with db.conn.transaction():
+            with db.conn.cursor() as cur:
+                cur.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0));", (group_id,))
+                cur.execute("""
+                    DELETE FROM pages WHERE revision_group_id = %s
+                    RETURNING topic_id, screenshot_path;
+                """, (group_id,))
+                rows = cur.fetchall()
+    finally:
+        db.close()
+    if not rows:
+        return None
+    for row in rows:
+        path = Path(row["screenshot_path"]) if row.get("screenshot_path") else None
+        if path and path.is_file():
+            try:
+                path.unlink()
+            except OSError:
+                pass
+    return {"topic_id": str(rows[0]["topic_id"])}
+
+
 if __name__ == "__main__":
     print(list_topics())

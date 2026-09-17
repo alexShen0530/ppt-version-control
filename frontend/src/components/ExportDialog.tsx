@@ -23,8 +23,8 @@ export function ExportDialog() {
 
   const entries = useSelectionStore(selectEntries(topicId))
   const move = useSelectionStore((s) => s.move)
-  const activeExport = useExportStore((s) => s.active)
-  const setActiveExport = useExportStore((s) => s.setActive)
+  const activeExport = useExportStore((s) => s.tasks.find((task) => task.exportId === s.viewedId))
+  const addExport = useExportStore((s) => s.add)
 
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -54,7 +54,7 @@ export function ExportDialog() {
         exportTopicId,
       )
       if (result) {
-        setActiveExport({
+        addExport({
           exportId: result.export_id,
           topicId: exportTopicId,
           entries: displayEntries.map((entry) => ({ ...entry })),

@@ -1,5 +1,5 @@
 import { memo, type CSSProperties } from 'react'
-import { ChevronDown, ZoomIn } from 'lucide-react'
+import { ChevronDown, Trash2, ZoomIn } from 'lucide-react'
 import { Checkbox } from './ui/Controls'
 import { cn, formatRelative } from '@/lib/utils'
 import type { MasterPage } from '@/types'
@@ -13,6 +13,8 @@ export interface PageCardProps {
   onOpen: (groupId: string) => void
   /** 文字区点击：只把信息送到右侧详情，不弹全屏，方便连续浏览右栏 */
   onOpenDetail: (groupId: string) => void
+  /** 删除整页（含全部版本），悬停缩略图右上角浮现 */
+  onDelete: (page: MasterPage) => void
   style?: CSSProperties
   className?: string
 }
@@ -29,6 +31,7 @@ export const PageCard = memo(function PageCard({
   onToggle,
   onOpen,
   onOpenDetail,
+  onDelete,
   style,
   className,
 }: PageCardProps) {
@@ -98,6 +101,24 @@ export const PageCard = memo(function PageCard({
             label={selected ? `取消选择 ${page.title}` : `选择 ${page.title}`}
           />
         </div>
+
+        {/* 删除整页：悬停缩略图时右上角浮现，走统一的确认弹窗 */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            onDelete(page)
+          }}
+          aria-label={`删除页面 ${page.title}`}
+          title="删除这一页（含全部版本）"
+          className={cn(
+            'absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full',
+            'bg-ink/70 text-white opacity-0 backdrop-blur-[2px] transition-opacity duration-150',
+            'hover:bg-danger focus-visible:opacity-100 group-hover/thumb:opacity-100',
+          )}
+        >
+          <Trash2 size={14} strokeWidth={2} />
+        </button>
 
         {/* 版本入口：告知当前版本与历史数量，切版本在全屏查看和右栏里都能做 */}
         <div className="absolute bottom-2 right-2">

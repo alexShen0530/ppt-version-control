@@ -6,7 +6,7 @@ from fastapi import APIRouter, Form, HTTPException, UploadFile
 
 from backend import config
 from backend.db.ppt_db_client import PPTDatabaseClient
-from backend.services.upload_service import create_upload, get_upload, upload_path
+from backend.services.upload_service import create_upload, get_upload, list_uploads, upload_path
 
 
 router = APIRouter()
@@ -40,6 +40,11 @@ async def upload_ppt(file: UploadFile, topic_id: Annotated[str, Form()]):
             output.write(chunk)
     create_upload(file_name, topic_id, str(target), upload_id)
     return {"upload_id": upload_id}
+
+
+@router.get("/uploads")
+def upload_history():
+    return list_uploads()
 
 
 @router.get("/uploads/{upload_id}")

@@ -31,6 +31,14 @@ def delete_revision(group_id: str, page_id: str):
     return result
 
 
+@router.delete("/revision-groups/{group_id}")
+def delete_revision_group(group_id: str):
+    result = service.delete_revision_group(group_id)
+    if not result:
+        raise HTTPException(404, "版本组不存在")
+    return result
+
+
 @files_router.get("/files/pages/{page_id}")
 def page_image(page_id: str):
     path = service.get_page_path(page_id)

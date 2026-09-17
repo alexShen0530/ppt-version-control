@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Check, FileClock, Layers, MoreHorizontal, Pencil, Plus, Trash2, Upload, X } from 'lucide-react'
+import { Check, FileClock, FileInput, Layers, MoreHorizontal, Pencil, Plus, Trash2, Upload, X } from 'lucide-react'
 import { Button } from './ui/Button'
 import { Dialog } from './ui/Dialog'
 import { UploadProgress } from './UploadProgress'
@@ -12,33 +12,25 @@ import {
 } from '@/hooks/useQueries'
 import { useNavStore } from '@/store/useNavStore'
 import { useSelectionStore } from '@/store/useSelectionStore'
+import { useUploadStore } from '@/store/useUploadStore'
+import cidiLogo from '@/assets/cidi-logo.png'
 import { cn } from '@/lib/utils'
 import type { Topic } from '@/types'
 
 /**
- * CIDI 字标：方块 C 与 D，第一个 i 空心点、第二个 i 实心点。
+ * CIDI 字标：素材为白色笔画 + 透明底，需垫品牌蓝底才可见。
  * 品牌蓝独立于界面色板，logo 保持自己的颜色。
  */
 function CidiMark() {
   return (
-    <svg
-      width="50"
-      height="18"
-      viewBox="0 0 110 40"
-      fill="none"
-      role="img"
-      aria-label="CIDI"
-      className="shrink-0"
-    >
-      <g stroke="#0E6EB8" strokeWidth="10" strokeLinejoin="round">
-        <path d="M34 5 H10 V35 H34" />
-        <path d="M46 13 V40" />
-        <circle cx="46" cy="6" r="3.4" strokeWidth="3.6" />
-        <path d="M60 5 H70 C80 5 84 11 84 20 C84 29 80 35 70 35 H60 Z" />
-        <path d="M100 13 V40" />
-      </g>
-      <circle cx="100" cy="6" r="5" fill="#0E6EB8" />
-    </svg>
+    <span className="inline-flex shrink-0 items-center rounded-field bg-[#0E6EB8] px-2.5 py-1.5">
+      <img
+        src={cidiLogo}
+        alt="CIDI 希迪智驾"
+        draggable={false}
+        className="h-[18px] w-auto select-none"
+      />
+    </span>
   )
 }
 
@@ -147,9 +139,10 @@ export function TopicSidebar() {
   const setActiveTopic = useNavStore((s) => s.setActiveTopic)
   const setUploadOpen = useNavStore((s) => s.setUploadOpen)
   const setExportHistoryOpen = useNavStore((s) => s.setExportHistoryOpen)
-  const activeUploadId = useNavStore((s) => s.activeUploadId)
+  const setImportHistoryOpen = useNavStore((s) => s.setImportHistoryOpen)
+  const setActiveUploadId = useNavStore((s) => s.setActiveUploadId)
   const topicCreateRequest = useNavStore((s) => s.topicCreateRequest)
-  const { data: uploadTask } = useUploadTask(activeUploadId)
+  const uploadIds = useUploadStore((s) => s.ids)
 
   const addTopic = useCreateTopic()
   const renameTopic = useRenameTopic()
@@ -221,9 +214,20 @@ export function TopicSidebar() {
       </div>
 
       <div className="px-3">
-        <Button variant="primary" className="w-full justify-center" onClick={() => setUploadOpen(true)}>
+        <Button variant="primary" className="w-full justify-center" onClick={() => {
+          setActiveUploadId(null)
+          setUploadOpen(true)
+        }}>
           <Upload size={15} strokeWidth={2} />
           上传 PPT
+        </Button>
+        <Button
+          variant="ghost"
+          className="mt-1.5 w-full justify-center"
+          onClick={() => setImportHistoryOpen(true)}
+        >
+          <FileInput size={15} strokeWidth={2} />
+          导入记录
         </Button>
         <Button
           variant="ghost"
@@ -359,9 +363,9 @@ export function TopicSidebar() {
         )}
       </nav>
 
-      {uploadTask ? (
-        <div className="border-t border-line p-3">
-          <UploadProgress task={uploadTask} variant="compact" />
+      {uploadIds.length ? (
+        <div className="scroll-area max-h-[35vh] space-y-2 overflow-y-auto border-t border-line p-3">
+          {uploadIds.map((id) => <SidebarUploadTask key={id} id={id} />)}
         </div>
       ) : (
         <div className="flex items-center gap-2 border-t border-line px-4 py-3 text-micro text-faint">
@@ -396,5 +400,25 @@ export function TopicSidebar() {
         </p>
       </Dialog>
     </aside>
+  )
+}
+
+function SidebarUploadTask({ id }: { id: string }) {
+  const { data: task } = useUploadTask(id)
+  const setActiveUploadId = useNavStore((s) => s.setActiveUploadId)
+  const setUploadOpen = useNavStore((s) => s.setUploadOpen)
+  if (!task) return null
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        setActiveUploadId(id)
+        setUploadOpen(true)
+      }}
+      className="block w-full text-left"
+      aria-label={`查看上传任务 ${task.file_name}`}
+    >
+      <UploadProgress task={task} variant="compact" />
+    </button>
   )
 }

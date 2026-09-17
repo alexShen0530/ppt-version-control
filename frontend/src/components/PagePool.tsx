@@ -53,6 +53,7 @@ export function PagePool() {
   const activeGroupId = useNavStore((s) => s.activeGroupId)
   const setUploadOpen = useNavStore((s) => s.setUploadOpen)
   const requestTopicCreate = useNavStore((s) => s.requestTopicCreate)
+  const requestDeleteGroup = useNavStore((s) => s.requestDeleteGroup)
 
   const { data: topics } = useTopics()
   const { data, isPending, isError, error } = useMasterPages(topicId)
@@ -140,6 +141,14 @@ export function PagePool() {
 
   const handleOpen = useCallback((groupId: string) => openPage(groupId), [openPage])
   const handleOpenDetail = useCallback((groupId: string) => openDetail(groupId), [openDetail])
+  const handleDelete = useCallback(
+    (page: MasterPage) => {
+      if (topicId) {
+        requestDeleteGroup({ groupId: page.revision_group_id, topicId, title: page.title })
+      }
+    },
+    [requestDeleteGroup, topicId],
+  )
 
   const filtering = filters.keyword.trim() !== '' || filters.source !== 'all'
 
@@ -317,6 +326,7 @@ export function PagePool() {
                           onToggle={handleToggle}
                           onOpen={handleOpen}
                           onOpenDetail={handleOpenDetail}
+                          onDelete={handleDelete}
                         />
                       ))}
                     </div>
@@ -385,6 +395,7 @@ function PoolCard({
   onToggle,
   onOpen,
   onOpenDetail,
+  onDelete,
 }: {
   page: MasterPage
   topicId: string | null
@@ -392,6 +403,7 @@ function PoolCard({
   onToggle: (page: MasterPage) => void
   onOpen: (groupId: string) => void
   onOpenDetail: (groupId: string) => void
+  onDelete: (page: MasterPage) => void
 }) {
   const selected = useSelectionStore(selectIsSelected(topicId, page.revision_group_id))
   return (
@@ -402,6 +414,7 @@ function PoolCard({
       onToggle={onToggle}
       onOpen={onOpen}
       onOpenDetail={onOpenDetail}
+      onDelete={onDelete}
     />
   )
 }

@@ -6,6 +6,7 @@ import { Select, Spinner } from './ui/Controls'
 import { UploadProgress } from './UploadProgress'
 import { startUpload, useTopics, useUploadTask } from '@/hooks/useQueries'
 import { useNavStore } from '@/store/useNavStore'
+import { useUploadStore } from '@/store/useUploadStore'
 import { cn } from '@/lib/utils'
 
 const ACCEPT_EXTENSIONS = ['.ppt', '.pptx']
@@ -29,6 +30,7 @@ export function UploadDialog() {
   const activeTopicId = useNavStore((s) => s.activeTopicId)
   const activeUploadId = useNavStore((s) => s.activeUploadId)
   const setActiveUploadId = useNavStore((s) => s.setActiveUploadId)
+  const addUpload = useUploadStore((s) => s.add)
 
   const { data: topics } = useTopics()
   const { data: task } = useUploadTask(activeUploadId)
@@ -76,6 +78,7 @@ export function UploadDialog() {
     setSubmitting(true)
     try {
       const { upload_id } = await startUpload(file, topicId)
+      addUpload(upload_id)
       setActiveUploadId(upload_id)
       setFile(null)
       if (inputRef.current) inputRef.current.value = ''
@@ -114,9 +117,12 @@ export function UploadDialog() {
         {task ? <UploadProgress task={task} variant="full" /> : null}
 
         {running ? (
-          <p className="text-caption leading-5 text-mute">
-            解析在后台继续，可以先关掉这个窗口，左侧会一直显示进度。解析完成后新页面会自动出现在页面池里。
-          </p>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-caption leading-5 text-mute">解析在后台继续，关闭弹窗也不会中断。</p>
+            <Button variant="secondary" size="sm" onClick={() => setActiveUploadId(null)}>
+              上传另一份
+            </Button>
+          </div>
         ) : (
           <>
             <div>

@@ -13,9 +13,9 @@ import type { SelectedEntry } from '@/store/useSelectionStore'
  */
 export function SelectedPagesBar() {
   const topicId = useNavStore((s) => s.activeTopicId)
-  const openPage = useNavStore((s) => s.openPage)
+  const openSelectedPage = useNavStore((s) => s.openSelectedPage)
   const setExportOpen = useNavStore((s) => s.setExportOpen)
-  const clearExport = useExportStore((s) => s.clear)
+  const viewExport = useExportStore((s) => s.view)
 
   const entries = useSelectionStore(selectEntries(topicId))
   const remove = useSelectionStore((s) => s.remove)
@@ -81,7 +81,7 @@ export function SelectedPagesBar() {
               onDragEnter={() => setOverIndex(index)}
               onDrop={handleDrop}
               onDragEnd={resetDrag}
-              onOpen={() => openPage(entry.revision_group_id, entry.revision_no)}
+              onOpen={() => openSelectedPage(entry.topic_id, entry.revision_group_id, entry.revision_no)}
               onRemove={() => remove(entry.revision_group_id)}
               onKeyMove={(delta) => handleKeyMove(index, delta)}
             />
@@ -96,7 +96,7 @@ export function SelectedPagesBar() {
             variant="primary"
             size="sm"
             onClick={() => {
-              clearExport()
+              viewExport(null)
               setExportOpen(true)
             }}
           >

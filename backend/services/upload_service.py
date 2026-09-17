@@ -110,6 +110,28 @@ def get_upload(upload_id: str) -> dict | None:
     }
 
 
+def list_uploads() -> list[dict]:
+    db = _db()
+    try:
+        rows = db.execute("""
+            SELECT u.upload_id, u.file_name, u.topic_id, t.name AS topic_name,
+                   u.status, u.total_pages, u.processed_pages,
+                   cardinality(u.new_page_ids) AS new_pages_count,
+                   cardinality(u.updated_group_ids) AS updated_groups_count,
+                   u.error, u.created_at
+            FROM upload_tasks u
+            LEFT JOIN topics t ON t.topic_id = u.topic_id
+            ORDER BY u.created_at DESC;
+        """, fetch="all")
+    finally:
+        db.close()
+    return [{
+        **row,
+        "upload_id": str(row["upload_id"]),
+        "created_at": row["created_at"].isoformat(),
+    } for row in rows]
+
+
 def upload_path(upload_id: str, file_name: str) -> Path:
     stem = "".join(
         char if char not in '<>:"/\\|?*' else "_"
